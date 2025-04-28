@@ -1,39 +1,105 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse
-from typing import Optional
+from typing import Optional, List, Tuple
+from pydantic import BaseModel
 import requests
-import base64
 import os
 from dotenv import load_dotenv
-from pydantic import BaseModel
+import logging
 
 # Load environment variables
 load_dotenv()
 
-app = FastAPI(title="WordPress Blog Poster API", 
-              description="API to post content to WordPress blogs")
+# Logging Configuration
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
-# Configuration
+# FastAPI instance
+app = FastAPI(
+    title="WordPress Blog Poster API",
+    description="API for posting to WordPress blogs via REST",
+    version="1.0.0"
+)
+
+# WordPress Configuration
 class WordPressConfig:
-    def __init__(self):
-        self.wp_url = os.getenv("WP_URL", "")  # Your WordPress site URL (e.g., https://example.com)
-        self.wp_username = os.getenv("WP_USERNAME", "")
-        self.wp_password = os.getenv("WP_PASSWORD", "")
-        self.wp_api_endpoint = f"{self.wp_url}/wp-json/wp/v2"
+    @property
+    def wp_url(self) -> str:
+        return os.getenv("WP_URL", "").rstrip('/')
 
-    def get_auth(self):
-        token = base64.b64encode(f"{self.wp_username}:{self.wp_password}".encode())
-        return {"Authorization": f"Basic {token.decode('utf-8')}"}
+    @property
+    def username(self) -> str:
+        return os.getenv("WP_USERNAME", "")
+
+    @property
+    def app_password(self) -> str:
+        return os.getenv("WP_APP_PASSWORD", "")
+
+    @property
+    def api_base(self) -> str:
+        return f"{self.wp_url}/wp-json/wp/v2"
+
+    def get_auth(self) -> Tuple[str, str]:
+        return self.username, self.app_password
+
+    def get_headers(self) -> dict:
+        return {
+            "User-Agent": "Mozilla/5.0 (compatible; FastAPI-Bot/1.0)",
+            "Accept": "application/json"
+        }
 
 wp_config = WordPressConfig()
 
+# Request model for Blog Post
 class BlogPost(BaseModel):
     title: str
     content: str
     excerpt: Optional[str] = None
     status: Optional[str] = "draft"
-    categories: Optional[list] = None
-    tags: Optional[list] = None
+    categories: Optional[List[int]] = None
+    tags: Optional[List[int]] = None
+
+
+@app.get("/", response_class=JSONResponse)
+async def root():
+    return {
+        "app": "WordPress Blog Poster API",
+        "version": "1.0.0",
+        "routes": ["/post-blog/", "/test-connection/"]
+    }
+
+
+@app.get("/test-connection/", response_class=JSONResponse)
+async def test_wordpress_connection():
+    try:
+        test_url = f"{wp_config.api_base}/posts"
+        logger.info(f"Testing WordPress connection at: {test_url}")
+
+        resp = requests.get(
+            test_url,
+            auth=wp_config.get_auth(),
+            headers=wp_config.get_headers(),
+            params={"per_page": 1}
+        )
+
+        try:
+            data = resp.json()
+            is_json = True
+        except ValueError:
+            data = resp.text[:500]
+            is_json = False
+
+        return {
+            "status": "ok" if resp.status_code < 400 else "error",
+            "status_code": resp.status_code,
+            "is_json": is_json,
+            "data": data
+        }
+
+    except requests.RequestException as e:
+        logger.error(f"Connection test failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/post-blog/", response_class=JSONResponse)
 async def create_blog_post(
@@ -45,139 +111,85 @@ async def create_blog_post(
     categories: Optional[str] = Form(None),
     tags: Optional[str] = Form(None)
 ):
-    # Validate config
-    if not all([wp_config.wp_url, wp_config.wp_username, wp_config.wp_password]):
-        raise HTTPException(500, "WordPress configuration missing. Set WP_URL, WP_USERNAME, and WP_PASSWORD.")
+    # Validate environment variables
+    if not all([wp_config.wp_url, wp_config.username, wp_config.app_password]):
+        raise HTTPException(status_code=500, detail="Missing WP_URL, WP_USERNAME, or WP_APP_PASSWORD in environment variables")
 
-    # Parse categories/tags into lists of ints
-    cat_ids = [int(c.strip()) for c in categories.split(",")] if categories else []
-    tag_ids = [int(t.strip()) for t in tags.split(",")] if tags else []
+    def parse_comma_separated_ids(input_str: Optional[str]) -> Optional[List[int]]:
+        return [int(x.strip()) for x in input_str.split(',') if x.strip().isdigit()] if input_str else None
 
-    # Build the post payload
     post_data = {
         "title": title,
         "content": content,
-        "status": status,
-        "categories": cat_ids,
-        "tags": tag_ids
+        "status": status
     }
+
     if excerpt:
         post_data["excerpt"] = excerpt
+    if categories := parse_comma_separated_ids(categories):
+        post_data["categories"] = categories
+    if tags := parse_comma_separated_ids(tags):
+        post_data["tags"] = tags
 
-    # ---- 1) Create the post ----
     try:
-        wp_resp = requests.post(
-            f"{wp_config.wp_api_endpoint}/posts",
-            json=post_data,
-            headers=wp_config.get_auth()
+        # Check WordPress connection before posting
+        logger.info("Testing WordPress connection before posting...")
+        test_response = requests.get(
+            f"{wp_config.api_base}/posts",
+            auth=wp_config.get_auth(),
+            headers=wp_config.get_headers(),
+            params={"per_page": 1}
         )
-    except requests.RequestException as e:
-        raise HTTPException(502, f"Network error posting to WordPress: {e}")
 
-    if not wp_resp.ok:
-        body = wp_resp.text or "(no response body)"
-        raise HTTPException(wp_resp.status_code, f"WP create-post error: {body}")
+        if test_response.status_code >= 400:
+            logger.error(f"Connection failed: {test_response.status_code} {test_response.text}")
+            raise HTTPException(status_code=test_response.status_code, detail="WordPress connection failed")
 
-    post_json = wp_resp.json()
-    post_id = post_json.get("id")
-    if not post_id:
-        raise HTTPException(500, f"Missing post ID in response: {post_json!r}")
+        # Handle feature image upload if provided
+        media_id = None
+        if feature_image:
+            logger.info("Uploading feature image...")
+            media_data = {
+                'file': (feature_image.filename, await feature_image.read(), feature_image.content_type)
+            }
+            media_response = requests.post(
+                f"{wp_config.api_base}/media",
+                auth=wp_config.get_auth(),
+                headers=wp_config.get_headers(),
+                files=media_data
+            )
 
-    # ---- 2) Upload and set featured image (if provided) ----
-    if feature_image:
-        file_bytes = await feature_image.read()
-        media_headers = {
-            **wp_config.get_auth(),
-            "Content-Disposition": f'attachment; filename="{feature_image.filename}"',
-            "Content-Type": feature_image.content_type
+            if media_response.status_code >= 400:
+                logger.error(f"Feature image upload failed: {media_response.status_code} {media_response.text}")
+                raise HTTPException(status_code=media_response.status_code, detail="Failed to upload feature image")
+
+            media_json = media_response.json()
+            media_id = media_json.get('id')
+
+        # Add feature image to post data if it was uploaded
+        if media_id:
+            post_data['featured_media'] = media_id
+
+        # Create post
+        logger.info(f"Posting blog: {title}")
+        post_response = requests.post(
+            f"{wp_config.api_base}/posts",
+            auth=wp_config.get_auth(),
+            headers=wp_config.get_headers(),
+            json=post_data
+        )
+
+        if post_response.status_code >= 400:
+            logger.error(f"Post creation failed: {post_response.status_code} {post_response.text}")
+            raise HTTPException(status_code=post_response.status_code, detail=post_response.text)
+
+        post_json = post_response.json()
+        return {
+            "status": "success",
+            "post_id": post_json.get("id"),
+            "link": post_json.get("link")
         }
 
-        # Upload media
-        try:
-            media_resp = requests.post(
-                f"{wp_config.wp_api_endpoint}/media",
-                headers=media_headers,
-                data=file_bytes
-            )
-        except requests.RequestException as e:
-            raise HTTPException(502, f"Network error uploading media: {e}")
-
-        if not media_resp.ok:
-            text = media_resp.text or "(no response body)"
-            raise HTTPException(media_resp.status_code, f"WP media upload error: {text}")
-
-        media_json = media_resp.json()
-        media_id = media_json.get("id")
-        if not media_id:
-            raise HTTPException(500, f"Missing media ID in response: {media_json!r}")
-
-        # Patch post to set featured image
-        try:
-            update_resp = requests.patch(
-                f"{wp_config.wp_api_endpoint}/posts/{post_id}",
-                json={"featured_media": media_id},
-                headers=wp_config.get_auth()
-            )
-        except requests.RequestException as e:
-            raise HTTPException(502, f"Network error setting featured image: {e}")
-
-        if not update_resp.ok:
-            text = update_resp.text or "(no response body)"
-            raise HTTPException(update_resp.status_code, f"WP set-featured-image error: {text}")
-
-    # ---- 3) Return success ----
-    return {
-        "status": "success",
-        "message": f"Blog post created with ID: {post_id}",
-        "post_id": post_id,
-        "permalink": post_json.get("link")
-    }
-
-
-@app.get("/categories/", response_class=JSONResponse)
-async def get_categories():
-    """Get all available categories from WordPress"""
-    try:
-        response = requests.get(
-            f"{wp_config.wp_api_endpoint}/categories",
-            headers=wp_config.get_auth()
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.HTTPError as e:
-        raise HTTPException(
-            status_code=e.response.status_code,
-            detail=f"WordPress API error: {e.response.text}"
-        )
-
-@app.get("/tags/", response_class=JSONResponse)
-async def get_tags():
-    """Get all available tags from WordPress"""
-    try:
-        response = requests.get(
-            f"{wp_config.wp_api_endpoint}/tags",
-            headers=wp_config.get_auth()
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.HTTPError as e:
-        raise HTTPException(
-            status_code=e.response.status_code,
-            detail=f"WordPress API error: {e.response.text}"
-        )
-
-@app.get("/", response_class=JSONResponse)
-async def read_root():
-    return {
-        "app": "WordPress Blog Poster API", 
-        "version": "1.0.0",
-        "endpoints": [
-            "/post-blog/",
-            "/categories/",
-            "/tags/"
-        ]
-    }
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    except requests.RequestException as e:
+        logger.error(f"Post request error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to communicate with WordPress")
