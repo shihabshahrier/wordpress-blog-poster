@@ -1,0 +1,412 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WordPress SEO Content Generator</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .section-card {
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .form-section {
+            margin-bottom: 2rem;
+        }
+
+        .form-section h3 {
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        #resultArea {
+            display: none;
+            margin-top: 2rem;
+        }
+
+        .loader {
+            display: none;
+            border: 4px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 4px solid #3498db;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container py-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="mb-4 text-center">WordPress SEO Content Generator</h1>
+                <p class="lead text-center mb-5">Generate SEO-optimized content and publish it to your WordPress site
+                </p>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-12">
+                <form id="mainForm">
+                    <!-- Credentials Section -->
+                    <div class="card section-card">
+                        <div class="card-header bg-primary text-white">
+                            <h2 class="mb-0">API Credentials</h2>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 form-section">
+                                    <h3>WordPress Credentials</h3>
+                                    <div class="mb-3">
+                                        <label for="wp_url" class="form-label">WordPress URL</label>
+                                        <input type="url" class="form-control" id="wp_url" name="wp_url"
+                                            placeholder="https://yourblog.com" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="wp_username" class="form-label">WordPress Username</label>
+                                        <input type="text" class="form-control" id="wp_username" name="wp_username"
+                                            required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="wp_app_password" class="form-label">WordPress Application
+                                            Password</label>
+                                        <input type="password" class="form-control" id="wp_app_password"
+                                            name="wp_app_password" required>
+                                    </div>
+                                    <button type="button" id="testWpConnection" class="btn btn-outline-primary">Test
+                                        WordPress Connection</button>
+                                    <div id="wpConnectionResult" class="mt-2"></div>
+                                </div>
+
+                                <div class="col-md-6 form-section">
+                                    <h3>Nebius AI Credentials</h3>
+                                    <div class="mb-3">
+                                        <label for="nebius_api_key" class="form-label">Nebius API Key</label>
+                                        <input type="password" class="form-control" id="nebius_api_key"
+                                            name="nebius_api_key" required>
+                                    </div>
+                                    <button type="button" id="testNebiusConnection" class="btn btn-outline-primary">Test
+                                        Nebius Connection</button>
+                                    <div id="nebiusConnectionResult" class="mt-2"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Content Generation Section -->
+                    <div class="card section-card mt-4">
+                        <div class="card-header bg-success text-white">
+                            <h2 class="mb-0">Content Generation</h2>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="main_topic" class="form-label">Main Topic</label>
+                                <input type="text" class="form-control" id="main_topic" name="main_topic"
+                                    placeholder="e.g. AI Tools for Content Marketing" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="keywords" class="form-label">Keywords (comma-separated)</label>
+                                <input type="text" class="form-control" id="keywords" name="keywords"
+                                    placeholder="e.g. AI content tools, content marketing automation, SEO optimization"
+                                    required>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="tone" class="form-label">Tone</label>
+                                        <select class="form-select" id="tone" name="tone">
+                                            <option value="informative">Informative</option>
+                                            <option value="professional">Professional</option>
+                                            <option value="conversational">Conversational</option>
+                                            <option value="friendly">Friendly</option>
+                                            <option value="authoritative">Authoritative</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="post_type" class="form-label">Post Type</label>
+                                        <select class="form-select" id="post_type" name="post_type">
+                                            <option value="article">Article</option>
+                                            <option value="guide">How-to Guide</option>
+                                            <option value="listicle">Listicle</option>
+                                            <option value="review">Review</option>
+                                            <option value="case-study">Case Study</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="word_count" class="form-label">Word Count</label>
+                                        <select class="form-select" id="word_count" name="word_count">
+                                            <option value="500">500</option>
+                                            <option value="800" selected>800</option>
+                                            <option value="1000">1000</option>
+                                            <option value="1500">1500</option>
+                                            <option value="2000">2000</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- WordPress Post Options -->
+                    <div class="card section-card mt-4">
+                        <div class="card-header bg-info text-white">
+                            <h2 class="mb-0">WordPress Post Options</h2>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="status" class="form-label">Post Status</label>
+                                        <select class="form-select" id="status" name="status">
+                                            <option value="draft" selected>Draft</option>
+                                            <option value="publish">Publish</option>
+                                            <option value="pending">Pending Review</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="categories" class="form-label">Categories (IDs,
+                                            comma-separated)</label>
+                                        <input type="text" class="form-control" id="categories" name="categories"
+                                            placeholder="e.g. 1,4,7">
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="tags" class="form-label">Tags (IDs, comma-separated)</label>
+                                        <input type="text" class="form-control" id="tags" name="tags"
+                                            placeholder="e.g. 2,5,9">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="feature_image" class="form-label">Feature Image (optional)</label>
+                                <input type="file" class="form-control" id="feature_image" name="feature_image">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2 mt-4">
+                        <button type="submit" id="generateButton" class="btn btn-lg btn-primary">Generate & Post
+                            Content</button>
+                    </div>
+                </form>
+
+                <div class="loader mt-4" id="loader"></div>
+
+                <div id="resultArea" class="card mt-4">
+                    <div class="card-header bg-success text-white">
+                        <h3 class="mb-0">Result</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="resultContent"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Test WordPress Connection
+            document.getElementById('testWpConnection').addEventListener('click', async function () {
+                const wpUrl = document.getElementById('wp_url').value;
+                const wpUsername = document.getElementById('wp_username').value;
+                const wpAppPassword = document.getElementById('wp_app_password').value;
+
+                if (!wpUrl || !wpUsername || !wpAppPassword) {
+                    document.getElementById('wpConnectionResult').innerHTML =
+                        '<div class="alert alert-warning">Please fill in all WordPress credentials</div>';
+                    return;
+                }
+
+                document.getElementById('wpConnectionResult').innerHTML =
+                    '<div class="alert alert-info">Testing connection...</div>';
+
+                const formData = new FormData();
+                formData.append('wp_url', wpUrl);
+                formData.append('wp_username', wpUsername);
+                formData.append('wp_app_password', wpAppPassword);
+
+                try {
+                    const response = await fetch('/test-wordpress-connection/', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const result = await response.json();
+
+                    if (result.status === 'ok') {
+                        document.getElementById('wpConnectionResult').innerHTML =
+                            '<div class="alert alert-success">Connection successful!</div>';
+                    } else {
+                        document.getElementById('wpConnectionResult').innerHTML =
+                            `<div class="alert alert-danger">Connection failed: ${result.error || result.status_code}</div>`;
+                    }
+                } catch (error) {
+                    document.getElementById('wpConnectionResult').innerHTML =
+                        `<div class="alert alert-danger">Error: ${error.message}</div>`;
+                }
+            });
+
+            // Test Nebius Connection
+            document.getElementById('testNebiusConnection').addEventListener('click', async function () {
+                const nebiusApiKey = document.getElementById('nebius_api_key').value;
+
+                if (!nebiusApiKey) {
+                    document.getElementById('nebiusConnectionResult').innerHTML =
+                        '<div class="alert alert-warning">Please enter Nebius API Key</div>';
+                    return;
+                }
+
+                document.getElementById('nebiusConnectionResult').innerHTML =
+                    '<div class="alert alert-info">Testing connection...</div>';
+
+                const formData = new FormData();
+                formData.append('nebius_api_key', nebiusApiKey);
+
+                try {
+                    const response = await fetch('/test-nebius-connection/', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const result = await response.json();
+
+                    if (result.status === 'ok') {
+                        document.getElementById('nebiusConnectionResult').innerHTML =
+                            '<div class="alert alert-success">Connection successful!</div>';
+                    } else {
+                        document.getElementById('nebiusConnectionResult').innerHTML =
+                            `<div class="alert alert-danger">Connection failed: ${result.message}</div>`;
+                    }
+                } catch (error) {
+                    document.getElementById('nebiusConnectionResult').innerHTML =
+                        `<div class="alert alert-danger">Error: ${error.message}</div>`;
+                }
+            });
+
+            // Main form submission
+            document.getElementById('mainForm').addEventListener('submit', async function (e) {
+                e.preventDefault();
+
+                // Show loader
+                document.getElementById('loader').style.display = 'block';
+                document.getElementById('resultArea').style.display = 'none';
+                document.getElementById('generateButton').disabled = true;
+
+                const formData = new FormData(this);
+
+                try {
+                    const response = await fetch('/generate-and-post/', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const result = await response.json();
+
+                    // Process and display result
+                    let resultHTML = '';
+
+                    if (result.status === 'error') {
+                        resultHTML = `<div class="alert alert-danger">Error: ${result.message}</div>`;
+                    } else {
+                        // Success case
+                        resultHTML = `
+                            <h4>Content Generated:</h4>
+                            <div class="mb-3">
+                                <strong>Title:</strong> ${result.generation.title}
+                            </div>
+                            <div class="mb-3">
+                                <strong>Excerpt:</strong> ${result.generation.excerpt}
+                            </div>
+                            <div class="mb-3">
+                                <strong>Content Preview:</strong>
+                                <div class="card p-3 bg-light">
+                                    ${result.generation.content_preview}
+                                </div>
+                            </div>
+                            <hr>
+                            <h4>WordPress Post Result:</h4>
+                        `;
+
+                        if (result.wordpress_post.status === 'success') {
+                            resultHTML += `
+                                <div class="alert alert-success">
+                                    <strong>Success!</strong> Post created with ID: ${result.wordpress_post.post_id}
+                                </div>
+                                <div class="mt-2">
+                                    <a href="${result.wordpress_post.link}" target="_blank" class="btn btn-primary">
+                                        View Post
+                                    </a>
+                                </div>
+                            `;
+                        } else {
+                            resultHTML += `
+                                <div class="alert alert-danger">
+                                    Error posting to WordPress: ${result.wordpress_post.message || 'Unknown error'}
+                                </div>
+                            `;
+                        }
+                    }
+
+                    // Display result
+                    document.getElementById('resultContent').innerHTML = resultHTML;
+                    document.getElementById('resultArea').style.display = 'block';
+
+                } catch (error) {
+                    document.getElementById('resultContent').innerHTML =
+                        `<div class="alert alert-danger">Error: ${error.message}</div>`;
+                    document.getElementById('resultArea').style.display = 'block';
+                } finally {
+                    // Hide loader, enable button
+                    document.getElementById('loader').style.display = 'none';
+                    document.getElementById('generateButton').disabled = false;
+                }
+            });
+
+            // Save form values to local storage when they change
+            const formElements = document.querySelectorAll('#mainForm input, #mainForm select');
+            formElements.forEach(element => {
+                // Load saved value if exists
+                const savedValue = localStorage.getItem(element.id);
+                if (savedValue && element.type !== 'file' && element.type !== 'password') {
+                    element.value = savedValue;
+                }
+
+                // Save value when changed
+                element.addEventListener('change', function () {
+                    if (element.type !== 'file' && element.type !== 'password') {
+                        localStorage.setItem(element.id, element.value);
+                    }
+                });
+            });
+        });
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>
