@@ -44,7 +44,7 @@ class WordPressConfig:
 
     def get_headers(self) -> dict:
         return {
-            "User-Agent": "Mozilla/5.0 (compatible; FastAPI-Bot/1.0)",
+            "User-Agent": "MyCustomBot/1.0",  # Custom User-Agent header
             "Accept": "application/json"
         }
 
